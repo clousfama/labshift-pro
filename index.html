@@ -104,36 +104,43 @@
                   console.log("Candidato selecionado:", candidatoSelecionado);
 
                   // Marcar o candidato selecionado
-                  const plantaoRef = db.collection('plantoes').doc(plantaoId);
-                  await plantaoRef.update({
-                      candidatoSelecionado: candidatoSelecionado.nome,
-                      statusSorteio: 'Realizado'
-                  });
-                  
-                  console.log("Plantão atualizado com candidato selecionado");
+                  try {
+                      const plantaoRef = db.collection('plantoes').doc(plantaoId);
+                      await plantaoRef.update({
+                          candidatoSelecionado: candidatoSelecionado.nome,
+                          statusSorteio: 'Realizado'
+                      });
+                      console.log("Plantão atualizado com candidato selecionado");
+                  } catch (error) {
+                      console.error("Erro ao atualizar plantão:", error);
+                  }
 
                   // Atualizar o status de todas as candidaturas
                   for (const candidato of candidatos) {
                       try {
-                          console.log("Atualizando status da candidatura:", candidato.id);
+                          // Garantir que estamos usando o ID como string
+                          const docId = String(candidato.id);
+                          console.log("Atualizando status da candidatura:", docId);
                           
-                          // Criar uma nova candidatura com status atualizado
-                          const novaCandidatura = {
-                              ...candidato,
-                              status: candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado'
-                          };
+                          // Usar set com merge para garantir atualização segura
+                          await db.collection('candidaturas').doc(docId).set({
+                              status: docId === String(candidatoSelecionado.id) ? 'Aprovado' : 'Não selecionado'
+                          }, { merge: true });
                           
-                          // Salvar no Firestore
-                          await db.collection('candidaturas').doc(candidato.id).set(novaCandidatura);
-                          console.log("Candidatura atualizada com sucesso:", candidato.id);
+                          console.log("Candidatura atualizada com sucesso:", docId);
                           
-                          // Atualizar também localmente
-                          const index = minhasCandidaturas.value.findIndex(c => c.id === candidato.id);
-                          if (index !== -1) {
-                              minhasCandidaturas.value[index].status = candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado';
+                          // Atualizar também localmente se tivermos acesso às refs do Vue
+                          if (window.vueRefs && window.vueRefs.minhasCandidaturas) {
+                              const index = window.vueRefs.minhasCandidaturas.value.findIndex(c => 
+                                  String(c.id) === docId
+                              );
+                              if (index !== -1) {
+                                  window.vueRefs.minhasCandidaturas.value[index].status = 
+                                      docId === String(candidatoSelecionado.id) ? 'Aprovado' : 'Não selecionado';
+                              }
                           }
                       } catch (updateError) {
-                          console.error("Erro ao atualizar candidatura:", updateError);
+                          console.error("Erro ao atualizar candidatura:", updateError, updateError.stack);
                       }
                   }
 
@@ -141,7 +148,15 @@
                   alert(`Sorteio realizado! Candidato selecionado: ${candidatoSelecionado.nome}`);
                   
                   // Atualizar a lista de plantões disponíveis para mostrar o candidato selecionado
-                  plantoesDisponiveis.value = await window.obterPlantoes();
+                  try {
+                      if (window.vueRefs && window.vueRefs.plantoesDisponiveis) {
+                          const plantoes = await window.obterPlantoes();
+                          window.vueRefs.plantoesDisponiveis.value = plantoes;
+                          console.log("Lista de plantões atualizada após sorteio!");
+                      }
+                  } catch (error) {
+                      console.error("Erro ao atualizar lista de plantões:", error);
+                  }
               } else {
                   console.log('Nenhum candidato encontrado para o sorteio.');
               }
@@ -320,6 +335,12 @@
     <script type="module">
         const { createApp, ref, onMounted, computed } = Vue;
         
+        // Variáveis de referência globais para comunicação entre componentes e funções
+        window.vueRefs = {
+            minhasCandidaturas: null,
+            plantoesDisponiveis: null
+        };
+        
         const app = createApp({
             setup() {
                 // Inicialização de todas as refs
@@ -331,6 +352,10 @@
                 const mostrarMeusPlantoes = ref(false);
                 const plantaoSelecionado = ref(null);
                 const nomeCandidato = ref('');
+                
+                // Registrar refs globalmente para acesso externo
+                window.vueRefs.minhasCandidaturas = minhasCandidaturas;
+                window.vueRefs.plantoesDisponiveis = plantoesDisponiveis;
                 
                 const novoPlantao = ref({
                     tipo: 'unico',
