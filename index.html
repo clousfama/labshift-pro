@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabShift Pro: Gerenciador de Plantões Laboratoriais</title>
+    <meta name="description" content="Sistema web responsivo para gestão automatizada de plantões extras em laboratório clínico, com sorteio automático e controle de candidaturas 12x60.">
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
+    <script>
+      // Configurações do Firebase
+      const firebaseConfig = {
+        apiKey: "AIzaSyC3ujl2KmFWB8uHX2eVVpz-vK7zjlJegRE",
+        authDomain: "gerenciadorplextra.firebaseapp.com",
+        projectId: "gerenciadorplextra",
+        storageBucket: "gerenciadorplextra.firebasestorage.app",
+        messagingSenderId: "163374616495",
+        appId: "1:163374616495:web:03530ec7bc80cf266e695a"
+      };
+
+      // Inicializar o Firebase
+      const app = firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+
+      // Funções para interagir com o Firestore
+      async function salvarPlantao(plantao) {
+          try {
+              await db.collection('plantoes').add(plantao);
+              console.log('Plantão salvo com sucesso!');
+          } catch (error) {
+              console.error('Erro ao salvar plantão:', error);
+          }
+      }
+
+      async function obterPlantoes() {
+          try {
+              const snapshot = await db.collection('plantoes').get();
+              const plantoes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              console.log('Plantões obtidos com sucesso:', plantoes);
+              return plantoes;
+          } catch (error) {
+              console.error('Erro ao obter plantões:', error);
+          }
+      }
+
+      async function desistirCandidatura(candidaturaId) {
+          try {
+              await db.collection('candidaturas').doc(candidaturaId).delete();
+              console.log('Candidatura desistida com sucesso!');
+          } catch (error) {
+              console.error('Erro ao desistir da candidatura:', error);
+          }
+      }
+
+      async function salvarCandidatura(candidatura) {
+          try {
+              await db.collection('candidaturas').add(candidatura);
+              console.log('Candidatura salva com sucesso!');
+          } catch (error) {
+              console.error('Erro ao salvar candidatura:', error);
+          }
+      }
+
+      async function realizarSorteio(plantaoId) {
+          try {
+              const candidaturas = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
+              const candidatos = candidaturas.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+              if (candidatos.length > 0) {
+                  const indiceAleatorio = Math.floor(Math.random() * candidatos.length);
+                  const candidatoSelecionado = candidatos[indiceAleatorio];
+
+                  // Atualizar status de todas as candidaturas
+                  for (const candidato of candidatos) {
+                      await db.collection('candidaturas').doc(candidato.id).update({
+                          status: candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado'
+                      });
+                  }
+
+                  console.log(`Candidato selecionado: ${candidatoSelecionado.nome}`);
+              } else {
+                  console.log('Nenhum candidato encontrado para o sorteio.');
+              }
+          } catch (error) {
+              console.error('Erro ao realizar sorteio:', error);
+          }
+      }
+    </script>
+</head>
+<body class="bg-gray-100">
+    <div id="app" class="min-h-screen">
+        <nav class="bg-indigo-600 text-white shadow-lg">
+            <div class="container mx-auto px-4 py-3">
+                <div class="flex justify-between items-center">
+                    <h1 class="text-2xl font-bold">LabShift Pro</h1>
+                    <div class="space-x-4">
+                        <button @click="mostrarDashboard = true; mostrarMeusPlantoes = false" class="hover:bg-indigo-700 px-3 py-2 rounded">Dashboard</button>
+                        <button @click="mostrarMeusPlantoes = true; mostrarDashboard = false" class="hover:bg-indigo-700 px-3 py-2 rounded">Meus Plantões</button>
+                        <button @click="mostrarModalCadastro = true" class="bg-green-500 hover:bg-green-600 px-3 py-2 rounded">Cadastrar Plantões</button>
+                    </div>
+                    
+                </div>
+            </div>
+        </nav>
+
+        <main class="container mx-auto px-4 py-8">
+            <div v-if="mostrarDashboard" class="grid md:grid-cols-2 gap-8">
+                <!-- Plantões Disponíveis -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold mb-4">Plantões Disponíveis</h2>
+                    <div class="space-y-4">
+                        <div v-for="plantao in plantoesDisponiveis" :key="plantao.id" 
+                             class="border p-4 rounded-lg hover:bg-gray-50">
+                            <div class="flex justify-between items-center">
+                                <div class="w-3/4">
+                                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{{ getCandidaturas(plantao.id) }}/3 candidatos</span>
+                                    <h3 class="font-medium">{{ formatarData(plantao.data) }}</h3>
+                                    <p class="text-gray-600">Turno: {{ plantao.turno }}</p>
+                                    <p class="text-gray-600">Letra: {{ plantao.letra }} <span v-if="plantao.candidatoSelecionado" class="bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold ml-2">Contemplado: {{ plantao.candidatoSelecionado }}</span></p>
+                                </div>
+                                <button @click="candidatar(plantao.id)" 
+                                        class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                                    Candidatar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Minhas Candidaturas -->
+                <div class="bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-xl font-semibold mb-4">Minhas Candidaturas</h2>
+                    <div class="space-y-4">
+                        <div v-for="candidatura in minhasCandidaturas" :key="candidatura.id"
+                             class="border p-4 rounded-lg">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="font-medium">{{ formatarData(candidatura.data) }}</h3>
+                                    <p class="text-gray-600">Status: {{ candidatura.status }}</p>
+                                    <p v-if="candidatura.status === 'Aprovado'" class="text-green-600 font-bold">Você foi selecionado!</p>
+                                    <button v-if="candidatura.status === 'Aprovado'" @click="desistirCandidatura(candidatura.id)" class="text-red-500 hover:underline">Desistir</button>
+                                </div>                                
+                                <span :class="{'text-green-500': candidatura.status === 'Aprovado',
+                                               'text-yellow-500': candidatura.status === 'Pendente',
+                                               'text-red-500': candidatura.status === 'Não selecionado'}"
+                                      class="flex items-center">
+                                    <span class="mr-2 text-xl">●</span>
+                                    <span v-if="candidatura.status === 'Aprovado'" class="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">Contemplado!</span>
+                                    <span v-if="candidatura.status === 'Pendente'" class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs">Aguardando sorteio</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Meus Plantões -->
+            <div v-if="mostrarMeusPlantoes" class="bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-xl font-semibold mb-4">Meus Plantões Confirmados</h2>
+                <div class="space-y-4">
+                    <div v-for="candidatura in minhasCandidaturas.filter(c => c.status === 'Aprovado')" :key="candidatura.id"
+                         class="border p-4 rounded-lg bg-green-50">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <h3 class="font-medium">{{ formatarData(candidatura.data) }}</h3>
+                                <p class="text-gray-600">Status: {{ candidatura.status }}</p>
+                                <p class="text-green-600 font-bold">Você foi selecionado para este plantão!</p>
+                            </div>
+                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">Confirmado</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Modal de Cadastro de Plantões -->
+        <div v-if="mostrarModalCadastro" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Cadastrar Novo Plantão</h2>
+                    <button @click="fecharModal" class="text-gray-500 hover:text-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <form @submit.prevent="salvarPlantao">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Tipo de Cadastro</label>
+                            <select v-model="novoPlantao.tipo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="unico">Data Única</option>
+                                <option value="periodo">Período</option>
+                            </select>
+                        </div>
+                        <div v-if="novoPlantao.tipo === 'unico'">
+                            <label class="block text-sm font-medium text-gray-700">Data</label>
+                            <input type="date" v-model="novoPlantao.data" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        <div v-if="novoPlantao.tipo === 'periodo'">
+                            <label class="block text-sm font-medium text-gray-700">Data Inicial</label>
+                            <input type="date" v-model="novoPlantao.dataInicial" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <label class="block text-sm font-medium text-gray-700 mt-2">Data Final</label>
+                            <input type="date" v-model="novoPlantao.dataFinal" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Turno</label>
+                            <select v-model="novoPlantao.turno" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="Diurno">Diurno</option>
+                                <option value="Noturno">Noturno</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Tipo de Vaga</label>
+                            <select v-model="novoPlantao.tipoVaga" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="Auxiliar">Auxiliar</option>
+                                <option value="Técnico">Técnico</option>
+                            </select>
+                        </div>
+                        <div>
+                            <button type="submit" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                                Salvar Plantão
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Modal de Candidatura -->
+        <div v-if="mostrarModalCandidatura" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">Candidatura para Plantão</h2>
+                    <button @click="fecharModalCandidatura" class="text-gray-500 hover:text-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div v-if="plantaoSelecionado" class="mb-4">
+                    <p class="font-medium">Data: {{ formatarData(plantaoSelecionado.data) }}</p>
+                    <p>Turno: {{ plantaoSelecionado.turno }}</p>
+                </div>
+                <form @submit.prevent="confirmarCandidatura">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Seu Nome</label>
+                        <input type="text" v-model="nomeCandidato" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                    </div>
+                    <button type="submit" class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">Tenho Interesse</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { SDK } from "https://webdraw.com/webdraw-sdk@v1";
+        
+        const { createApp, ref, onMounted, computed } = Vue;
+
+        createApp({
+            setup() {
+                const plantoesDisponiveis = ref([]);
+                const minhasCandidaturas = ref([]);
+                const mostrarModalCadastro = ref(false);
+                const mostrarModalCandidatura = ref(false);
+                const mostrarDashboard = ref(true);
+                const mostrarMeusPlantoes = ref(false);
+                const plantaoSelecionado = ref(null);
+                const nomeCandidato = ref('');
+                
+                const novoPlantao = ref({
+                    tipo: 'unico',
+                    data: '',
+                    dataInicial: '',
+                    dataFinal: '',
+                    turno: 'Diurno',
+                    tipoVaga: 'Auxiliar'
+                });
+                
+                const fecharModal = () => {
+                    mostrarModalCadastro.value = false;
+                };
+
+                const fecharModalCandidatura = () => {
+                    mostrarModalCandidatura.value = false;
+                };
+                
+                const candidatar = async (plantaoId) => {
+                    try {
+                        const plantao = plantoesDisponiveis.value.find(p => p.id === plantaoId);
+                        if (plantao) {
+                            const candidaturasParaEssePlantao = minhasCandidaturas.value.filter(
+                                c => c.plantaoId === plantaoId
+                            ).length;
+                            
+                            if (candidaturasParaEssePlantao >= 3) {
+                                alert('Este plantão já atingiu o limite máximo de 3 candidaturas!');
+                                realizarSorteio(plantaoId);
+                                return;
+                            }
+                            
+                            mostrarModalCandidatura.value = true;
+                            plantaoSelecionado.value = plantao;
+                        } else {
+                            console.error('Plantão não encontrado');
+                        }
+                    } catch (error) {
+                        console.error('Erro ao processar candidatura:', error);
+                    }
+                };
+
+                const realizarSorteio = async (plantaoId) => {
+                    const candidaturas = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
+                    const candidatos = candidaturas.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                    if (candidatos.length > 0) {
+                        const indiceAleatorio = Math.floor(Math.random() * candidatos.length);
+                        const candidatoSelecionado = candidatos[indiceAleatorio];
+
+                        for (const candidato of candidatos) {
+                            await db.collection('candidaturas').doc(candidato.id).update({
+                                status: candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado'
+                            });
+                        }
+
+                        console.log(`Candidato selecionado: ${candidatoSelecionado.nome}`);
+                    } else {
+                        console.log('Nenhum candidato encontrado para o sorteio.');
+                    }
+                };
+                
+                const salvarPlantao = () => {
+                    const plantao = {
+                        tipo: novoPlantao.value.tipo,
+                        data: novoPlantao.value.data,
+                        turno: novoPlantao.value.turno,
+                        tipoVaga: novoPlantao.value.tipoVaga
+                    };
+                    cadastrarPlantao(plantao);
+                    fecharModal();
+                };
+
+                const cadastrarPlantao = async (plantao) => {
+                  try {
+          // Chama a função global salvarPlantao definida no cabeçalho
+        await window.salvarPlantao(plantao);
+        console.log('Plantão cadastrado com sucesso!');
+        alert('Plantão cadastrado com sucesso!');
+        
+        // Atualizar a lista de plantões disponíveis
+        plantoesDisponiveis.value = await obterPlantoes();
+    } catch (error) {
+        console.error('Erro ao cadastrar plantão:', error);
+        alert('Erro ao cadastrar plantão. Verifique o console para mais detalhes.');
+    }
+};
+                
+                const confirmarCandidatura = () => {
+                    if (!nomeCandidato.value || !plantaoSelecionado.value) {
+                        alert('Por favor, preencha seu nome.');
+                        return;
+                    }
+                    
+                    const novaCandidatura = {
+                        id: minhasCandidaturas.value.length + 1,
+                        data: plantaoSelecionado.value.data,
+                        status: 'Pendente',
+                        plantaoId: plantaoSelecionado.value.id,
+                        nome: nomeCandidato.value
+                    };
+                    
+                    minhasCandidaturas.value.push(novaCandidatura);
+                    salvarCandidatura(novaCandidatura);
+                    alert('Candidatura registrada com sucesso!');
+                    
+                    if (getCandidaturas(plantaoSelecionado.value.id) === 3) {
+                        realizarSorteio(plantaoSelecionado.value.id);
+                    }
+                    
+                    nomeCandidato.value = '';
+                    fecharModalCandidatura();
+                };
+                
+                const getCandidaturas = (plantaoId) => {
+                    return minhasCandidaturas.value.filter(c => c.plantaoId === plantaoId).length;
+                };
+                
+                const formatarData = (dataString) => {
+                    if (!dataString) return '';
+                    const [ano, mes, dia] = dataString.split('-');
+                    return `${dia}/${mes}/${ano}`;
+                };
+
+                onMounted(async () => {
+                    plantoesDisponiveis.value = await obterPlantoes();
+                });
+
+                return {
+                    plantoesDisponiveis,
+                    minhasCandidaturas,
+                    candidatar,
+                    mostrarModalCadastro,
+                    novoPlantao,
+                    fecharModal,
+                    fecharModalCandidatura,
+                    salvarPlantao,
+                    mostrarModalCandidatura,
+                    nomeCandidato,
+                    confirmarCandidatura,
+                    getCandidaturas,
+                    plantaoSelecionado,
+                    formatarData
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
