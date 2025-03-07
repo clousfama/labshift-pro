@@ -12,34 +12,26 @@
     <!-- Firebase Firestore -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script>
-      // Configurações do Firebase
-      const firebaseConfig = {
-        apiKey: "AIzaSyC3ujl2KmFWB8uHX2eVVpz-vK7zjlJegRE",
-        authDomain: "gerenciadorplextra.firebaseapp.com",
-        projectId: "gerenciadorplextra",
-        storageBucket: "gerenciadorplextra.appspot.com",
-        messagingSenderId: "163374616495",
-        appId: "1:163374616495:web:03530ec7bc80cf266e695a"
-      };
-
-      // Inicializar o Firebase imediatamente
-      firebase.initializeApp(firebaseConfig);
+      // Initialize Firebase
+      firebase.initializeApp({
+          apiKey: "AIzaSyBLOuE-eVsdl-nPl7F3NUzg6H4-lQ_KpF4",
+          authDomain: "labshift-pro.firebaseapp.com",
+          projectId: "labshift-pro",
+          storageBucket: "labshift-pro.appspot.com",
+          messagingSenderId: "1040182136089",
+          appId: "1:1040182136089:web:8f2bc4e12c6c88a0df16bd"
+      });
+      
       const db = firebase.firestore();
       
-      // Configurar as regras de CORS para o Firestore
-      db.settings({
-        ignoreUndefinedProperties: true,
-        merge: true
-      });
-
-      // Funções para interagir com o Firestore
-      window.salvarPlantao = async function(plantao) {
+      // Definições de funções globais usadas via window
+      window.salvarCandidatura = async function(candidatura) {
           try {
-              const docRef = await db.collection('plantoes').add(plantao);
-              console.log('Plantão salvo com sucesso! ID:', docRef.id);
-              return { id: docRef.id, ...plantao };
+              const docRef = await db.collection('candidaturas').add(candidatura);
+              console.log('Candidatura salva com sucesso! ID:', docRef.id);
+              return { id: docRef.id, ...candidatura };
           } catch (error) {
-              console.error('Erro ao salvar plantão:', error);
+              console.error('Erro ao salvar candidatura:', error);
               throw error;
           }
       }
@@ -81,17 +73,6 @@
               return true;
           } catch (error) {
               console.error('Erro ao processar desistência:', error);
-              throw error;
-          }
-      }
-
-      window.salvarCandidatura = async function(candidatura) {
-          try {
-              const docRef = await db.collection('candidaturas').add(candidatura);
-              console.log('Candidatura salva com sucesso! ID:', docRef.id);
-              return { id: docRef.id, ...candidatura };
-          } catch (error) {
-              console.error('Erro ao salvar candidatura:', error);
               throw error;
           }
       }
@@ -200,6 +181,17 @@
           } catch (error) {
               console.error('Erro ao realizar sorteio:', error);
               return 'Erro: ' + error.message;
+          }
+      }
+
+      window.salvarPlantao = async function(plantao) {
+          try {
+              const docRef = await db.collection('plantoes').add(plantao);
+              console.log('Plantão salvo com sucesso! ID:', docRef.id);
+              return { id: docRef.id, ...plantao };
+          } catch (error) {
+              console.error('Erro ao salvar plantão:', error);
+              throw error;
           }
       }
     </script>
@@ -416,7 +408,7 @@
             <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-bold">Candidatura para Plantão</h2>
-                    <button @click="fecharModalCandidatura" class="text-gray-500 hover:text-gray-700">
+                    <button @click="mostrarModalCandidatura = false" class="text-gray-500 hover:text-gray-700">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -482,7 +474,6 @@
                 };
 
                 const fecharModalCandidatura = () => {
-                    console.log("Fechando modal de candidatura");
                     mostrarModalCandidatura.value = false;
                 };
 
