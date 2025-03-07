@@ -58,10 +58,30 @@
 
       window.desistirCandidatura = async function(candidaturaId) {
           try {
+              // Obter a candidatura para conhecer o plantão associado
+              const candidaturaDoc = await db.collection('candidaturas').doc(candidaturaId).get();
+              if (!candidaturaDoc.exists) {
+                  throw new Error('Candidatura não encontrada');
+              }
+              
+              const candidatura = candidaturaDoc.data();
+              const plantaoId = candidatura.plantaoId;
+              
+              // Resetar o status da candidatura para "Desistência"
               await db.collection('candidaturas').doc(candidaturaId).delete();
-              console.log('Candidatura desistida com sucesso!');
+              console.log('Candidatura deletada com sucesso');
+              
+              // Resetar o plantão para ficar disponível novamente
+              await db.collection('plantoes').doc(plantaoId).update({
+                  candidatoSelecionado: null,
+                  statusSorteio: null
+              });
+              console.log('Plantão liberado para novas candidaturas');
+              
+              return true;
           } catch (error) {
-              console.error('Erro ao desistir da candidatura:', error);
+              console.error('Erro ao processar desistência:', error);
+              throw error;
           }
       }
 
@@ -228,6 +248,14 @@
                                     </p>
                                     <p class="text-gray-600">Turno: {{ candidatura.turno }}</p>
                                     <p class="text-gray-600">Tipo de Vaga: {{ candidatura.tipoVaga }}</p>
+                                    <p v-if="candidatura.status === 'Aprovado'" class="text-green-600 font-bold mt-2">
+                                        {{ candidatura.nome }}, você foi selecionado!
+                                    </p>
+                                    <button v-if="candidatura.status === 'Aprovado'" 
+                                            @click="desistirPlantao(candidatura)" 
+                                            class="mt-2 bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
+                                        Desistir deste plantão
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -248,9 +276,17 @@
                                     <h3 class="font-medium">{{ formatarData(candidatura.data) }}</h3>
                                     <p class="text-gray-600">Turno: {{ candidatura.turno }}</p>
                                     <p class="text-gray-600">Tipo de Vaga: {{ candidatura.tipoVaga }}</p>
-                                    <p class="text-green-600 font-bold">Status: Confirmado</p>
+                                    <p class="text-green-600 font-bold">{{ candidatura.nome }}, você foi confirmado!</p>
                                 </div>
                             </div>
+                        </div>
+                        
+                        <!-- Botão para gerar relatório -->
+                        <div class="mt-4">
+                            <button @click="gerarRelatorio" 
+                                    class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                                Gerar Relatório de Contemplados
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -259,17 +295,34 @@
             <!-- Meus Plantões -->
             <div v-if="mostrarMeusPlantoes" class="bg-white rounded-lg shadow-md p-6">
                 <h2 class="text-xl font-semibold mb-4">Meus Plantões Confirmados</h2>
-                <div class="space-y-4">
+                <div v-if="!minhasCandidaturas.some(c => c.status === 'Aprovado')" class="text-gray-500">
+                    Você ainda não tem plantões confirmados.
+                </div>
+                <div v-else class="space-y-4">
                     <div v-for="candidatura in minhasCandidaturas.filter(c => c.status === 'Aprovado')" :key="candidatura.id"
                          class="border p-4 rounded-lg bg-green-50">
                         <div class="flex justify-between items-center">
                             <div>
                                 <h3 class="font-medium">{{ formatarData(candidatura.data) }}</h3>
-                                <p class="text-gray-600">Status: {{ candidatura.status }}</p>
-                                <p class="text-green-600 font-bold">Você foi selecionado para este plantão!</p>
+                                <p class="text-gray-600">Turno: {{ candidatura.turno }}</p>
+                                <p class="text-gray-600">Tipo de Vaga: {{ candidatura.tipoVaga }}</p>
+                                <p class="text-green-600 font-bold">{{ candidatura.nome }}, você foi selecionado!</p>
                             </div>
-                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">Confirmado</span>
+                            <div>
+                                <button @click="desistirPlantao(candidatura)" 
+                                        class="bg-red-500 text-white px-3 py-1 rounded text-sm hover:bg-red-600">
+                                    Desistir
+                                </button>
+                            </div>
                         </div>
+                    </div>
+                    
+                    <!-- Botão para gerar relatório -->
+                    <div class="mt-4">
+                        <button @click="gerarRelatorio" 
+                                class="w-full bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">
+                            Gerar Relatório de Contemplados
+                        </button>
                     </div>
                 </div>
             </div>
@@ -528,6 +581,80 @@
                     return `${dia}/${mes}/${ano}`;
                 };
 
+                const desistirPlantao = async (candidatura) => {
+                    try {
+                        await window.desistirCandidatura(candidatura.id);
+                        alert('Desistência registrada com sucesso!');
+                        // Atualizar a lista de candidaturas locais
+                        minhasCandidaturas.value = minhasCandidaturas.value.filter(c => c.id !== candidatura.id);
+                    } catch (error) {
+                        console.error('Erro ao desistir do plantão:', error);
+                        alert('Erro ao registrar desistência. Verifique o console para mais detalhes.');
+                    }
+                };
+
+                const gerarRelatorio = async () => {
+                    try {
+                        // Obter todas as candidaturas aprovadas do Firebase
+                        const snapshot = await db.collection('candidaturas').where('status', '==', 'Aprovado').get();
+                        
+                        if (snapshot.empty) {
+                            alert('Não há candidatos confirmados para gerar relatório.');
+                            return;
+                        }
+                        
+                        // Criar o conteúdo do relatório
+                        let relatorio = '# RELATÓRIO DE PLANTÕES CONFIRMADOS #\n\n';
+                        relatorio += 'Data de geração: ' + new Date().toLocaleDateString('pt-BR') + '\n\n';
+                        relatorio += '--------------------------------------------------------\n\n';
+                        
+                        const candidatosAprovados = [];
+                        
+                        snapshot.forEach(doc => {
+                            const candidatura = doc.data();
+                            candidatosAprovados.push({
+                                nome: candidatura.nome,
+                                data: candidatura.data,
+                                turno: candidatura.turno,
+                                tipoVaga: candidatura.tipoVaga
+                            });
+                        });
+                        
+                        // Ordenar por data
+                        candidatosAprovados.sort((a, b) => new Date(a.data) - new Date(b.data));
+                        
+                        // Adicionar cada candidato ao relatório
+                        candidatosAprovados.forEach((candidato, index) => {
+                            relatorio += `${index + 1}. Nome: ${candidato.nome}\n`;
+                            relatorio += `   Data: ${formatarData(candidato.data)}\n`;
+                            relatorio += `   Turno: ${candidato.turno}\n`;
+                            relatorio += `   Tipo de Vaga: ${candidato.tipoVaga}\n`;
+                            relatorio += '--------------------------------------------------------\n\n';
+                        });
+                        
+                        // Criar um blob e gerar um link para download
+                        const blob = new Blob([relatorio], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'relatorio_plantoes_' + new Date().toISOString().slice(0, 10) + '.txt';
+                        document.body.appendChild(a);
+                        a.click();
+                        
+                        // Limpar
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        }, 0);
+                        
+                        console.log('Relatório gerado com sucesso!');
+                    } catch (error) {
+                        console.error('Erro ao gerar relatório:', error);
+                        alert('Erro ao gerar relatório. Por favor, tente novamente.');
+                    }
+                };
+
                 onMounted(async () => {
                     plantoesDisponiveis.value = await window.obterPlantoes();
                 });
@@ -549,7 +676,9 @@
                     plantaoSelecionado,
                     formatarData,
                     mostrarDashboard,
-                    mostrarMeusPlantoes
+                    mostrarMeusPlantoes,
+                    desistirPlantao,
+                    gerarRelatorio
                 };
             }
         }).mount('#app');
