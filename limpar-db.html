@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpar Banco de Dados LabShift Pro</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <!-- Firebase App -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+    <header class="bg-indigo-600 text-white p-4">
+        <h1 class="text-2xl font-bold">LabShift Pro - Ferramenta Administrativa</h1>
+    </header>
+
+    <main class="container mx-auto p-4 flex-grow flex flex-col items-center justify-center">
+        <div class="bg-white rounded-lg shadow-md p-6 w-full max-w-lg">
+            <h2 class="text-xl font-semibold mb-4 text-center">Ferramenta para Limpar o Banco de Dados</h2>
+            
+            <div class="mb-6">
+                <p class="text-gray-700 mb-2">Esta ferramenta irá apagar <strong>TODOS</strong> os dados do banco de dados:</p>
+                <ul class="list-disc list-inside mb-4 text-gray-600">
+                    <li>Todos os plantões cadastrados</li>
+                    <li>Todas as candidaturas</li>
+                </ul>
+                <p class="bg-yellow-100 p-2 rounded text-yellow-800">⚠️ Esta ação não pode ser desfeita!</p>
+            </div>
+
+            <div class="space-y-4">
+                <button id="limparPlantoes" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition">
+                    Limpar Todos os Plantões
+                </button>
+                
+                <button id="limparCandidaturas" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition">
+                    Limpar Todas as Candidaturas
+                </button>
+
+                <button id="limparTudo" class="w-full bg-red-700 hover:bg-red-800 text-white py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-red-700 focus:ring-offset-2 transition">
+                    Limpar Tudo (Plantões + Candidaturas)
+                </button>
+            </div>
+
+            <div id="resultado" class="mt-6 p-3 rounded hidden">
+                <!-- Resultado será mostrado aqui -->
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-gray-200 text-center p-4 text-gray-600">
+        <a href="index.html" class="text-indigo-600 hover:underline">Voltar para o LabShift Pro</a>
+    </footer>
+
+    <script>
+        // Inicializar Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyC3ujl2KmFWB8uHX2eVVpz-vK7zjlJegRE",
+            authDomain: "gerenciadorplextra.firebaseapp.com",
+            projectId: "gerenciadorplextra",
+            storageBucket: "gerenciadorplextra.appspot.com",
+            messagingSenderId: "163374616495",
+            appId: "1:163374616495:web:03530ec7bc80cf266e695a"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Função para mostrar resultados
+        function mostrarResultado(mensagem, tipo) {
+            const resultado = document.getElementById('resultado');
+            resultado.textContent = mensagem;
+            resultado.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+            
+            if (tipo === 'sucesso') {
+                resultado.classList.add('bg-green-100', 'text-green-800');
+            } else {
+                resultado.classList.add('bg-red-100', 'text-red-800');
+            }
+        }
+
+        // Função para limpar todos os documentos de uma coleção
+        async function limparColecao(colecao) {
+            try {
+                const snapshot = await db.collection(colecao).get();
+                
+                if (snapshot.empty) {
+                    return `Nenhum documento encontrado na coleção ${colecao}`;
+                }
+
+                const batch = db.batch();
+                snapshot.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                });
+
+                await batch.commit();
+                return `${snapshot.size} documento(s) da coleção ${colecao} foram excluídos com sucesso!`;
+            } catch (error) {
+                console.error(`Erro ao limpar a coleção ${colecao}:`, error);
+                throw error;
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('limparPlantoes').addEventListener('click', async () => {
+            if (!confirm('Tem certeza que deseja limpar TODOS os plantões? Esta ação não pode ser desfeita!')) {
+                return;
+            }
+            
+            try {
+                const mensagem = await limparColecao('plantoes');
+                mostrarResultado(mensagem, 'sucesso');
+            } catch (error) {
+                mostrarResultado(`Erro ao limpar plantões: ${error.message}`, 'erro');
+            }
+        });
+
+        document.getElementById('limparCandidaturas').addEventListener('click', async () => {
+            if (!confirm('Tem certeza que deseja limpar TODAS as candidaturas? Esta ação não pode ser desfeita!')) {
+                return;
+            }
+            
+            try {
+                const mensagem = await limparColecao('candidaturas');
+                mostrarResultado(mensagem, 'sucesso');
+            } catch (error) {
+                mostrarResultado(`Erro ao limpar candidaturas: ${error.message}`, 'erro');
+            }
+        });
+
+        document.getElementById('limparTudo').addEventListener('click', async () => {
+            if (!confirm('Tem certeza que deseja limpar TODOS os dados (plantões e candidaturas)? Esta ação não pode ser desfeita!')) {
+                return;
+            }
+            
+            try {
+                await limparColecao('plantoes');
+                await limparColecao('candidaturas');
+                mostrarResultado('Todos os dados foram excluídos com sucesso!', 'sucesso');
+            } catch (error) {
+                mostrarResultado(`Erro ao limpar dados: ${error.message}`, 'erro');
+            }
+        });
+    </script>
+</body>
+</html>
