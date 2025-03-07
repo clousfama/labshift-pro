@@ -578,13 +578,24 @@
                             
                             if (totalCandidaturas >= 3) {
                                 console.log("Atingiu 3 candidaturas. Iniciando sorteio.");
+                                
+                                // Importante: Salvar o ID do plantão antes de fechar o modal
+                                const plantaoId = plantaoSelecionado.value.id;
+                                
+                                // Limpar campos e fechar modal
+                                nomeCandidato.value = '';
+                                fecharModalCandidatura();
+                                
+                                // Agora realizar o sorteio com o ID salvo
                                 setTimeout(() => {
-                                    window.realizarSorteio(plantaoSelecionado.value.id);
-                                }, 1000); // Delay para garantir que o Firebase salve a candidatura antes do sorteio
+                                    console.log("Realizando sorteio para plantão ID:", plantaoId);
+                                    window.realizarSorteio(plantaoId);
+                                }, 1000);
+                            } else {
+                                // Se não atingiu 3 candidaturas, apenas fechar o modal
+                                nomeCandidato.value = '';
+                                fecharModalCandidatura();
                             }
-                            
-                            nomeCandidato.value = '';
-                            fecharModalCandidatura();
                         })
                         .catch(error => {
                             console.error("Erro ao salvar candidatura:", error);
@@ -674,6 +685,29 @@
                         console.error('Erro ao gerar relatório:', error);
                         alert('Erro ao gerar relatório. Por favor, tente novamente.');
                     }
+                };
+
+                const abrirModalCandidatura = (plantao) => {
+                    console.log("Abrindo modal de candidatura para plantão:", plantao);
+                    
+                    if (!plantao || !plantao.id) {
+                        console.error("Plantão inválido ou sem ID:", plantao);
+                        alert("Erro ao abrir candidatura. Tente atualizar a página.");
+                        return;
+                    }
+                    
+                    // Verifica candidaturas antes de abrir o modal
+                    const candidaturasExistentes = minhasCandidaturas.value.filter(c => c.plantaoId === plantao.id).length;
+                    console.log(`Total de candidaturas existentes para este plantão: ${candidaturasExistentes}`);
+                    
+                    if (candidaturasExistentes >= 3) {
+                        alert('Este plantão já atingiu o limite máximo de 3 candidaturas!');
+                        return;
+                    }
+                    
+                    // Se tudo estiver ok, abre o modal
+                    plantaoSelecionado.value = plantao;
+                    mostrarModalCandidatura.value = true;
                 };
 
                 onMounted(async () => {
