@@ -235,7 +235,18 @@
                                     <p class="text-gray-600">Turno: {{ plantao.turno }}</p>
                                     <p class="text-gray-600">Tipo de Vaga: {{ plantao.tipoVaga }} <span v-if="plantao.candidatoSelecionado" class="bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold ml-2">Contemplado: {{ plantao.candidatoSelecionado }}</span></p>
                                 </div>
-                                <button @click="() => { plantaoSelecionado = plantao; mostrarModalCandidatura = true; }" 
+                                <button @click="(event) => {
+                                    event.preventDefault();
+                                    console.log('Plantão selecionado:', plantao);
+                                    plantaoSelecionado = plantao;
+                                    if (plantaoSelecionado) {
+                                        console.log('Abrindo modal para plantão:', plantaoSelecionado.id);
+                                        mostrarModalCandidatura = true;
+                                    } else {
+                                        console.error('Erro ao selecionar plantão');
+                                        alert('Erro ao abrir candidatura. Tente novamente.');
+                                    }
+                                }" 
                                         class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
                                     Candidatar
                                 </button>
@@ -411,16 +422,22 @@
                         </svg>
                     </button>
                 </div>
-                <div v-if="plantaoSelecionado" class="mb-4">
+                <div v-if="plantaoSelecionado && plantaoSelecionado.data" class="mb-4">
                     <p class="font-medium">Data: {{ formatarData(plantaoSelecionado.data) }}</p>
                     <p>Turno: {{ plantaoSelecionado.turno }}</p>
+                    <p>Tipo de Vaga: {{ plantaoSelecionado.tipoVaga }}</p>
+                </div>
+                <div v-else class="mb-4 text-red-500">
+                    Erro ao carregar informações do plantão. Por favor, feche o modal e tente novamente.
                 </div>
                 <form @submit.prevent="confirmarCandidatura">
                     <div class="mb-4">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Seu Nome</label>
-                        <input type="text" v-model="nomeCandidato" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                        <input type="text" v-model="nomeCandidato" class="w-full px-3 py-2 rounded-md border border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
                     </div>
-                    <button type="submit" class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">Tenho Interesse</button>
+                    <button type="submit" class="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                        Tenho Interesse
+                    </button>
                 </form>
             </div>
         </div>
@@ -465,9 +482,8 @@
                 };
 
                 const fecharModalCandidatura = () => {
+                    console.log("Fechando modal de candidatura");
                     mostrarModalCandidatura.value = false;
-                    plantaoSelecionado.value = null;
-                    nomeCandidato.value = '';
                 };
 
                 const abrirModalCandidatura = (plantao) => {
@@ -563,29 +579,50 @@
                 };
                 
                 const confirmarCandidatura = () => {
-                    if (!nomeCandidato.value || !plantaoSelecionado.value) {
-                        alert('Por favor, preencha seu nome.');
-                        return;
-                    }
-                    
                     console.log("Confirmando candidatura para plantão:", plantaoSelecionado.value);
                     console.log("Nome do candidato:", nomeCandidato.value);
                     
+                    // Validações adicionais
+                    if (!plantaoSelecionado.value || !plantaoSelecionado.value.id) {
+                        console.error("Erro: plantão inválido", plantaoSelecionado.value);
+                        alert("Erro: Plantão inválido. Tente recarregar a página e tentar novamente.");
+                        return;
+                    }
+                    
+                    if (!nomeCandidato.value.trim()) {
+                        alert("Por favor, informe seu nome para continuar.");
+                        return;
+                    }
+                    
+                    // Verificar candidaturas existentes para este plantão
+                    const candidaturasExistentes = minhasCandidaturas.value.filter(
+                        c => c.plantaoId === plantaoSelecionado.value.id
+                    ).length;
+                    
+                    if (candidaturasExistentes >= 3) {
+                        alert("Este plantão já atingiu o limite máximo de 3 candidaturas!");
+                        fecharModalCandidatura();
+                        return;
+                    }
+                    
+                    // Gerar nova candidatura
                     const novaCandidatura = {
                         plantaoId: plantaoSelecionado.value.id,
                         data: plantaoSelecionado.value.data,
-                        status: 'Pendente',
-                        nome: nomeCandidato.value,
-                        timestamp: new Date().toISOString(),
                         turno: plantaoSelecionado.value.turno,
-                        tipoVaga: plantaoSelecionado.value.tipoVaga
+                        tipoVaga: plantaoSelecionado.value.tipoVaga,
+                        nome: nomeCandidato.value,
+                        dataCadastro: new Date().toISOString(),
+                        status: 'Pendente'
                     };
                     
-                    window.salvarCandidatura(novaCandidatura)
-                        .then((candidaturaSalva) => {
-                            // Adicionar à lista local depois de salvar no Firebase
-                            minhasCandidaturas.value.push(candidaturaSalva);
-                            alert('Candidatura registrada com sucesso!');
+                    db.collection('candidaturas').add(novaCandidatura)
+                        .then(docRef => {
+                            console.log("Candidatura salva com sucesso! ID:", docRef.id);
+                            
+                            // Adicionar o ID ao objeto
+                            novaCandidatura.id = docRef.id;
+                            minhasCandidaturas.value.push(novaCandidatura);
                             
                             // Contar total de candidaturas para este plantão
                             const totalCandidaturas = minhasCandidaturas.value.filter(
