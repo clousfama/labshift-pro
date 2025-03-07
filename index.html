@@ -448,8 +448,15 @@
 
                 const fecharModalCandidatura = () => {
                     mostrarModalCandidatura.value = false;
+                    plantaoSelecionado.value = null;
+                    nomeCandidato.value = '';
                 };
-                
+
+                const abrirModalCandidatura = (plantao) => {
+                    plantaoSelecionado.value = plantao;
+                    mostrarModalCandidatura.value = true;
+                };
+
                 const candidatar = async (plantaoId) => {
                     try {
                         const plantao = plantoesDisponiveis.value.find(p => p.id === plantaoId);
@@ -678,7 +685,8 @@
                     mostrarDashboard,
                     mostrarMeusPlantoes,
                     desistirPlantao,
-                    gerarRelatorio
+                    gerarRelatorio,
+                    abrirModalCandidatura
                 };
             }
         }).mount('#app');
