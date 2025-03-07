@@ -22,8 +22,8 @@
         appId: "1:163374616495:web:03530ec7bc80cf266e695a"
       };
 
-      // Inicializar o Firebase
-      const app = firebase.initializeApp(firebaseConfig);
+      // Inicializar o Firebase imediatamente
+      firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
       
       // Configurar as regras de CORS para o Firestore
@@ -33,7 +33,7 @@
       });
 
       // Funções para interagir com o Firestore
-      async function salvarPlantao(plantao) {
+      window.salvarPlantao = async function(plantao) {
           try {
               const docRef = await db.collection('plantoes').add(plantao);
               console.log('Plantão salvo com sucesso! ID:', docRef.id);
@@ -44,7 +44,7 @@
           }
       }
 
-      async function obterPlantoes() {
+      window.obterPlantoes = async function() {
           try {
               const snapshot = await db.collection('plantoes').get();
               const plantoes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -56,7 +56,7 @@
           }
       }
 
-      async function desistirCandidatura(candidaturaId) {
+      window.desistirCandidatura = async function(candidaturaId) {
           try {
               await db.collection('candidaturas').doc(candidaturaId).delete();
               console.log('Candidatura desistida com sucesso!');
@@ -65,7 +65,7 @@
           }
       }
 
-      async function salvarCandidatura(candidatura) {
+      window.salvarCandidatura = async function(candidatura) {
           try {
               await db.collection('candidaturas').add(candidatura);
               console.log('Candidatura salva com sucesso!');
@@ -74,7 +74,7 @@
           }
       }
 
-      async function realizarSorteio(plantaoId) {
+      window.realizarSorteio = async function(plantaoId) {
           try {
               const candidaturas = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
               const candidatos = candidaturas.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -273,6 +273,7 @@
 
         createApp({
             setup() {
+                // Inicialização de todas as refs
                 const plantoesDisponiveis = ref([]);
                 const minhasCandidaturas = ref([]);
                 const mostrarModalCadastro = ref(false);
@@ -309,7 +310,7 @@
                             
                             if (candidaturasParaEssePlantao >= 3) {
                                 alert('Este plantão já atingiu o limite máximo de 3 candidaturas!');
-                                realizarSorteio(plantaoId);
+                                window.realizarSorteio(plantaoId);
                                 return;
                             }
                             
@@ -351,7 +352,6 @@
                         tipoVaga: novoPlantao.value.tipoVaga
                     };
                     cadastrarPlantao(plantao);
-                    fecharModal();
                 };
 
                 const cadastrarPlantao = async (plantao) => {
@@ -369,6 +369,7 @@
                     } else {
                         console.warn('Nenhum plantão foi retornado após o cadastro');
                     }
+                    fecharModal();
                   } catch (error) {
                     console.error('Erro ao cadastrar plantão:', error);
                     alert('Erro ao cadastrar plantão. Verifique o console para mais detalhes.');
@@ -390,11 +391,11 @@
                     };
                     
                     minhasCandidaturas.value.push(novaCandidatura);
-                    salvarCandidatura(novaCandidatura);
+                    window.salvarCandidatura(novaCandidatura);
                     alert('Candidatura registrada com sucesso!');
                     
                     if (getCandidaturas(plantaoSelecionado.value.id) === 3) {
-                        realizarSorteio(plantaoSelecionado.value.id);
+                        window.realizarSorteio(plantaoSelecionado.value.id);
                     }
                     
                     nomeCandidato.value = '';
@@ -412,7 +413,7 @@
                 };
 
                 onMounted(async () => {
-                    plantoesDisponiveis.value = await obterPlantoes();
+                    plantoesDisponiveis.value = await window.obterPlantoes();
                 });
 
                 return {
