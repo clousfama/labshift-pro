@@ -453,31 +453,42 @@
                 };
 
                 const abrirModalCandidatura = (plantao) => {
+                    console.log("Abrindo modal de candidatura para plantão:", plantao);
+                    
+                    if (!plantao || !plantao.id) {
+                        console.error("Plantão inválido ou sem ID:", plantao);
+                        alert("Erro ao abrir candidatura. Tente atualizar a página.");
+                        return;
+                    }
+                    
+                    // Verifica candidaturas antes de abrir o modal
+                    const candidaturasExistentes = minhasCandidaturas.value.filter(c => c.plantaoId === plantao.id).length;
+                    console.log(`Total de candidaturas existentes para este plantão: ${candidaturasExistentes}`);
+                    
+                    if (candidaturasExistentes >= 3) {
+                        alert('Este plantão já atingiu o limite máximo de 3 candidaturas!');
+                        return;
+                    }
+                    
+                    // Se tudo estiver ok, abre o modal
                     plantaoSelecionado.value = plantao;
                     mostrarModalCandidatura.value = true;
                 };
 
                 const candidatar = async (plantaoId) => {
+                    // Esta função não está sendo usada diretamente, e está causando conflito
+                    // com abrirModalCandidatura. Redirecionamos para a nova implementação
                     try {
                         const plantao = plantoesDisponiveis.value.find(p => p.id === plantaoId);
                         if (plantao) {
-                            const candidaturasParaEssePlantao = minhasCandidaturas.value.filter(
-                                c => c.plantaoId === plantaoId
-                            ).length;
-                            
-                            if (candidaturasParaEssePlantao >= 3) {
-                                alert('Este plantão já atingiu o limite máximo de 3 candidaturas!');
-                                window.realizarSorteio(plantaoId);
-                                return;
-                            }
-                            
-                            mostrarModalCandidatura.value = true;
-                            plantaoSelecionado.value = plantao;
+                            abrirModalCandidatura(plantao);
                         } else {
-                            console.error('Plantão não encontrado');
+                            console.error("Plantão não encontrado com ID:", plantaoId);
+                            alert("Erro ao encontrar o plantão. Por favor, atualize a página.");
                         }
                     } catch (error) {
-                        console.error('Erro ao processar candidatura:', error);
+                        console.error("Erro ao processar candidatura:", error);
+                        alert("Ocorreu um erro ao processar sua candidatura. Por favor, tente novamente.");
                     }
                 };
 
@@ -538,6 +549,9 @@
                         alert('Por favor, preencha seu nome.');
                         return;
                     }
+                    
+                    console.log("Confirmando candidatura para plantão:", plantaoSelecionado.value);
+                    console.log("Nome do candidato:", nomeCandidato.value);
                     
                     const novaCandidatura = {
                         plantaoId: plantaoSelecionado.value.id,
@@ -663,7 +677,32 @@
                 };
 
                 onMounted(async () => {
-                    plantoesDisponiveis.value = await window.obterPlantoes();
+                    try {
+                        console.log("Inicializando o aplicativo...");
+                        
+                        // Carregar plantões disponíveis
+                        console.log("Carregando plantões disponíveis...");
+                        plantoesDisponiveis.value = await window.obterPlantoes();
+                        console.log("Plantões carregados:", plantoesDisponiveis.value);
+                        
+                        // Carregar minhas candidaturas
+                        console.log("Carregando candidaturas...");
+                        const snapshot = await db.collection('candidaturas').get();
+                        minhasCandidaturas.value = [];
+                        
+                        snapshot.forEach((doc) => {
+                            const candidatura = {
+                                id: doc.id,
+                                ...doc.data()
+                            };
+                            minhasCandidaturas.value.push(candidatura);
+                        });
+                        
+                        console.log("Candidaturas carregadas:", minhasCandidaturas.value);
+                    } catch (error) {
+                        console.error("Erro ao inicializar aplicativo:", error);
+                        alert("Ocorreu um erro ao carregar dados. Por favor, tente novamente.");
+                    }
                 });
 
                 return {
