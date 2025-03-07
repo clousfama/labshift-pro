@@ -79,8 +79,21 @@
       window.realizarSorteio = async function(plantaoId) {
           try {
               console.log("Iniciando sorteio para plantão ID:", plantaoId);
-              const candidaturas = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
-              const candidatos = candidaturas.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              const candidaturasSnapshot = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
+              console.log("Snapshot obtido:", candidaturasSnapshot);
+              
+              if (candidaturasSnapshot.empty) {
+                  console.log('Nenhum candidato encontrado para o sorteio.');
+                  return;
+              }
+              
+              const candidatos = [];
+              candidaturasSnapshot.forEach(doc => {
+                  candidatos.push({
+                      id: doc.id,
+                      ...doc.data()
+                  });
+              });
               
               console.log("Candidatos encontrados:", candidatos);
 
@@ -90,22 +103,45 @@
                   
                   console.log("Candidato selecionado:", candidatoSelecionado);
 
-                  // Atualizar status de todas as candidaturas
+                  // Marcar o candidato selecionado
+                  const plantaoRef = db.collection('plantoes').doc(plantaoId);
+                  await plantaoRef.update({
+                      candidatoSelecionado: candidatoSelecionado.nome,
+                      statusSorteio: 'Realizado'
+                  });
+                  
+                  console.log("Plantão atualizado com candidato selecionado");
+
+                  // Atualizar o status de todas as candidaturas
                   for (const candidato of candidatos) {
                       try {
-                          // Garantir que o ID é uma string válida
-                          const docId = String(candidato.id);
-                          console.log("Atualizando candidatura com ID:", docId);
+                          console.log("Atualizando status da candidatura:", candidato.id);
                           
-                          await db.collection('candidaturas').doc(docId).update({
-                              status: docId === String(candidatoSelecionado.id) ? 'Aprovado' : 'Não selecionado'
-                          });
+                          // Criar uma nova candidatura com status atualizado
+                          const novaCandidatura = {
+                              ...candidato,
+                              status: candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado'
+                          };
+                          
+                          // Salvar no Firestore
+                          await db.collection('candidaturas').doc(candidato.id).set(novaCandidatura);
+                          console.log("Candidatura atualizada com sucesso:", candidato.id);
+                          
+                          // Atualizar também localmente
+                          const index = minhasCandidaturas.value.findIndex(c => c.id === candidato.id);
+                          if (index !== -1) {
+                              minhasCandidaturas.value[index].status = candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado';
+                          }
                       } catch (updateError) {
                           console.error("Erro ao atualizar candidatura:", updateError);
                       }
                   }
 
-                  console.log(`Candidato selecionado: ${candidatoSelecionado.nome}`);
+                  console.log(`Sorteio finalizado. Candidato selecionado: ${candidatoSelecionado.nome}`);
+                  alert(`Sorteio realizado! Candidato selecionado: ${candidatoSelecionado.nome}`);
+                  
+                  // Atualizar a lista de plantões disponíveis para mostrar o candidato selecionado
+                  plantoesDisponiveis.value = await window.obterPlantoes();
               } else {
                   console.log('Nenhum candidato encontrado para o sorteio.');
               }
@@ -400,7 +436,9 @@
                         data: plantaoSelecionado.value.data,
                         status: 'Pendente',
                         nome: nomeCandidato.value,
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
+                        turno: plantaoSelecionado.value.turno,
+                        tipoVaga: plantaoSelecionado.value.tipoVaga
                     };
                     
                     window.salvarCandidatura(novaCandidatura)
@@ -409,8 +447,18 @@
                             minhasCandidaturas.value.push(candidaturaSalva);
                             alert('Candidatura registrada com sucesso!');
                             
-                            if (getCandidaturas(plantaoSelecionado.value.id) >= 3) {
-                                window.realizarSorteio(plantaoSelecionado.value.id);
+                            // Contar total de candidaturas para este plantão
+                            const totalCandidaturas = minhasCandidaturas.value.filter(
+                                c => c.plantaoId === plantaoSelecionado.value.id
+                            ).length;
+                            
+                            console.log(`Total de candidaturas para este plantão: ${totalCandidaturas}`);
+                            
+                            if (totalCandidaturas >= 3) {
+                                console.log("Atingiu 3 candidaturas. Iniciando sorteio.");
+                                setTimeout(() => {
+                                    window.realizarSorteio(plantaoSelecionado.value.id);
+                                }, 1000); // Delay para garantir que o Firebase salve a candidatura antes do sorteio
                             }
                             
                             nomeCandidato.value = '';
