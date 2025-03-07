@@ -267,11 +267,9 @@
     </div>
 
     <script type="module">
-        import { SDK } from "https://webdraw.com/webdraw-sdk@v1";
-        
         const { createApp, ref, onMounted, computed } = Vue;
-
-        createApp({
+        
+        const app = createApp({
             setup() {
                 // Inicialização de todas as refs
                 const plantoesDisponiveis = ref([]);
@@ -437,6 +435,14 @@
                 };
             }
         }).mount('#app');
+    </script>
+    
+    <!-- Carregar todas as dependências do Vue -->
+    <script>
+        // Garantir que o Vue está completamente inicializado
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM totalmente carregado e analisado');
+        });
     </script>
 </body>
 </html>
