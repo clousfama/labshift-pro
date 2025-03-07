@@ -98,90 +98,108 @@
 
       window.realizarSorteio = async function(plantaoId) {
           try {
-              console.log("Iniciando sorteio para plantão ID:", plantaoId);
-              const candidaturasSnapshot = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
-              console.log("Snapshot obtido:", candidaturasSnapshot);
+              console.log(`Iniciando sorteio para plantão ${plantaoId}`);
+
+              // Verificar se já existe um sorteio para este plantão
+              const plantaoDoc = await db.collection('plantoes').doc(plantaoId).get();
+              const plantao = plantaoDoc.data();
               
-              if (candidaturasSnapshot.empty) {
-                  console.log('Nenhum candidato encontrado para o sorteio.');
-                  return;
+              if (plantao.candidatoSelecionado) {
+                  console.log('Já existe um candidato selecionado para este plantão:', plantao.candidatoSelecionado);
+                  return 'Já sorteado';
               }
               
-              const candidatos = [];
-              candidaturasSnapshot.forEach(doc => {
-                  candidatos.push({
+              console.log('Buscando candidaturas para o plantão...');
+              
+              // Obter todas as candidaturas para o plantão
+              const snapshot = await db.collection('candidaturas')
+                  .where('plantaoId', '==', plantaoId)
+                  .where('status', '==', 'Pendente')
+                  .get();
+              
+              console.log(`Candidaturas encontradas: ${snapshot.size}`);
+              
+              if (snapshot.empty) {
+                  console.log('Não há candidaturas para este plantão');
+                  return 'Sem candidaturas';
+              }
+              
+              // Coletar todas as candidaturas pendentes
+              const candidaturas = [];
+              snapshot.forEach(doc => {
+                  candidaturas.push({
                       id: doc.id,
                       ...doc.data()
                   });
               });
               
-              console.log("Candidatos encontrados:", candidatos);
-
-              if (candidatos.length > 0) {
-                  const indiceAleatorio = Math.floor(Math.random() * candidatos.length);
-                  const candidatoSelecionado = candidatos[indiceAleatorio];
-                  
-                  console.log("Candidato selecionado:", candidatoSelecionado);
-
-                  // Marcar o candidato selecionado
-                  try {
-                      const plantaoRef = db.collection('plantoes').doc(plantaoId);
-                      await plantaoRef.update({
-                          candidatoSelecionado: candidatoSelecionado.nome,
-                          statusSorteio: 'Realizado'
-                      });
-                      console.log("Plantão atualizado com candidato selecionado");
-                  } catch (error) {
-                      console.error("Erro ao atualizar plantão:", error);
-                  }
-
-                  // Atualizar o status de todas as candidaturas
-                  for (const candidato of candidatos) {
-                      try {
-                          // Garantir que estamos usando o ID como string
-                          const docId = String(candidato.id);
-                          console.log("Atualizando status da candidatura:", docId);
-                          
-                          // Usar set com merge para garantir atualização segura
-                          await db.collection('candidaturas').doc(docId).set({
-                              status: docId === String(candidatoSelecionado.id) ? 'Aprovado' : 'Não selecionado'
-                          }, { merge: true });
-                          
-                          console.log("Candidatura atualizada com sucesso:", docId);
-                          
-                          // Atualizar também localmente se tivermos acesso às refs do Vue
-                          if (window.vueRefs && window.vueRefs.minhasCandidaturas) {
-                              const index = window.vueRefs.minhasCandidaturas.value.findIndex(c => 
-                                  String(c.id) === docId
-                              );
-                              if (index !== -1) {
-                                  window.vueRefs.minhasCandidaturas.value[index].status = 
-                                      docId === String(candidatoSelecionado.id) ? 'Aprovado' : 'Não selecionado';
-                              }
-                          }
-                      } catch (updateError) {
-                          console.error("Erro ao atualizar candidatura:", updateError, updateError.stack);
-                      }
-                  }
-
-                  console.log(`Sorteio finalizado. Candidato selecionado: ${candidatoSelecionado.nome}`);
-                  alert(`Sorteio realizado! Candidato selecionado: ${candidatoSelecionado.nome}`);
-                  
-                  // Atualizar a lista de plantões disponíveis para mostrar o candidato selecionado
-                  try {
-                      if (window.vueRefs && window.vueRefs.plantoesDisponiveis) {
-                          const plantoes = await window.obterPlantoes();
-                          window.vueRefs.plantoesDisponiveis.value = plantoes;
-                          console.log("Lista de plantões atualizada após sorteio!");
-                      }
-                  } catch (error) {
-                      console.error("Erro ao atualizar lista de plantões:", error);
-                  }
-              } else {
-                  console.log('Nenhum candidato encontrado para o sorteio.');
+              // Se houver menos de 3 candidaturas, aguardar mais candidaturas
+              if (candidaturas.length < 3) {
+                  console.log(`Sorteio cancelado: apenas ${candidaturas.length} candidaturas (mínimo 3)`);
+                  return 'Aguardando mais candidaturas';
               }
+              
+              // Sortear um candidato aleatoriamente
+              const indiceSorteado = Math.floor(Math.random() * candidaturas.length);
+              const candidaturaSorteada = candidaturas[indiceSorteado];
+              
+              console.log('Candidato sorteado:', candidaturaSorteada.nome);
+              
+              // Atualizar o status da candidatura sorteada
+              await db.collection('candidaturas').doc(candidaturaSorteada.id).update({
+                  status: 'Aprovado'
+              });
+              
+              // Marcar as outras candidaturas como não selecionadas
+              const promises = candidaturas
+                  .filter(c => c.id !== candidaturaSorteada.id)
+                  .map(c => db.collection('candidaturas').doc(c.id).update({
+                      status: 'Não selecionado'
+                  }));
+              
+              await Promise.all(promises);
+              
+              // Marcar o plantão como tendo um candidato selecionado
+              await db.collection('plantoes').doc(plantaoId).update({
+                  candidatoSelecionado: candidaturaSorteada.nome,
+                  statusSorteio: 'Realizado'
+              });
+              
+              // Recarregar as candidaturas no cliente
+              if (window.vueRefs && window.vueRefs.minhasCandidaturas) {
+                  const snapshotCandidaturas = await db.collection('candidaturas').get();
+                  const candidaturasAtualizadas = [];
+                  
+                  snapshotCandidaturas.forEach(doc => {
+                      candidaturasAtualizadas.push({
+                          id: doc.id,
+                          ...doc.data()
+                      });
+                  });
+                  
+                  window.vueRefs.minhasCandidaturas.value = candidaturasAtualizadas;
+                  
+                  // Atualizar plantões também
+                  const snapshotPlantoes = await db.collection('plantoes').get();
+                  const plantoesAtualizados = [];
+                  
+                  snapshotPlantoes.forEach(doc => {
+                      plantoesAtualizados.push({
+                          id: doc.id,
+                          ...doc.data()
+                      });
+                  });
+                  
+                  if (window.vueRefs.plantoesDisponiveis) {
+                      window.vueRefs.plantoesDisponiveis.value = plantoesAtualizados;
+                  }
+              }
+              
+              console.log('Sorteio realizado e banco de dados atualizado com sucesso');
+              return 'Sorteio realizado';
           } catch (error) {
               console.error('Erro ao realizar sorteio:', error);
+              return 'Erro: ' + error.message;
           }
       }
     </script>
@@ -615,10 +633,20 @@
 
                 const desistirPlantao = async (candidatura) => {
                     try {
+                        // Guardar o ID do plantão antes de desistir
+                        const plantaoId = candidatura.plantaoId;
+                        
                         await window.desistirCandidatura(candidatura.id);
                         alert('Desistência registrada com sucesso!');
+                        
                         // Atualizar a lista de candidaturas locais
                         minhasCandidaturas.value = minhasCandidaturas.value.filter(c => c.id !== candidatura.id);
+                        
+                        // Importante: Recarregar a lista de plantões para atualizar interface
+                        const plantoes = await window.obterPlantoes();
+                        plantoesDisponiveis.value = plantoes;
+                        
+                        console.log("Plantão liberado e interface atualizada. Plantão ID:", plantaoId);
                     } catch (error) {
                         console.error('Erro ao desistir do plantão:', error);
                         alert('Erro ao registrar desistência. Verifique o console para mais detalhes.');
