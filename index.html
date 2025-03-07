@@ -67,27 +67,42 @@
 
       window.salvarCandidatura = async function(candidatura) {
           try {
-              await db.collection('candidaturas').add(candidatura);
-              console.log('Candidatura salva com sucesso!');
+              const docRef = await db.collection('candidaturas').add(candidatura);
+              console.log('Candidatura salva com sucesso! ID:', docRef.id);
+              return { id: docRef.id, ...candidatura };
           } catch (error) {
               console.error('Erro ao salvar candidatura:', error);
+              throw error;
           }
       }
 
       window.realizarSorteio = async function(plantaoId) {
           try {
+              console.log("Iniciando sorteio para plantão ID:", plantaoId);
               const candidaturas = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
               const candidatos = candidaturas.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+              
+              console.log("Candidatos encontrados:", candidatos);
 
               if (candidatos.length > 0) {
                   const indiceAleatorio = Math.floor(Math.random() * candidatos.length);
                   const candidatoSelecionado = candidatos[indiceAleatorio];
+                  
+                  console.log("Candidato selecionado:", candidatoSelecionado);
 
                   // Atualizar status de todas as candidaturas
                   for (const candidato of candidatos) {
-                      await db.collection('candidaturas').doc(candidato.id).update({
-                          status: candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado'
-                      });
+                      try {
+                          // Garantir que o ID é uma string válida
+                          const docId = String(candidato.id);
+                          console.log("Atualizando candidatura com ID:", docId);
+                          
+                          await db.collection('candidaturas').doc(docId).update({
+                              status: docId === String(candidatoSelecionado.id) ? 'Aprovado' : 'Não selecionado'
+                          });
+                      } catch (updateError) {
+                          console.error("Erro ao atualizar candidatura:", updateError);
+                      }
                   }
 
                   console.log(`Candidato selecionado: ${candidatoSelecionado.nome}`);
@@ -381,23 +396,30 @@
                     }
                     
                     const novaCandidatura = {
-                        id: minhasCandidaturas.value.length + 1,
+                        plantaoId: plantaoSelecionado.value.id,
                         data: plantaoSelecionado.value.data,
                         status: 'Pendente',
-                        plantaoId: plantaoSelecionado.value.id,
-                        nome: nomeCandidato.value
+                        nome: nomeCandidato.value,
+                        timestamp: new Date().toISOString()
                     };
                     
-                    minhasCandidaturas.value.push(novaCandidatura);
-                    window.salvarCandidatura(novaCandidatura);
-                    alert('Candidatura registrada com sucesso!');
-                    
-                    if (getCandidaturas(plantaoSelecionado.value.id) === 3) {
-                        window.realizarSorteio(plantaoSelecionado.value.id);
-                    }
-                    
-                    nomeCandidato.value = '';
-                    fecharModalCandidatura();
+                    window.salvarCandidatura(novaCandidatura)
+                        .then((candidaturaSalva) => {
+                            // Adicionar à lista local depois de salvar no Firebase
+                            minhasCandidaturas.value.push(candidaturaSalva);
+                            alert('Candidatura registrada com sucesso!');
+                            
+                            if (getCandidaturas(plantaoSelecionado.value.id) >= 3) {
+                                window.realizarSorteio(plantaoSelecionado.value.id);
+                            }
+                            
+                            nomeCandidato.value = '';
+                            fecharModalCandidatura();
+                        })
+                        .catch(error => {
+                            console.error("Erro ao salvar candidatura:", error);
+                            alert('Erro ao registrar candidatura. Tente novamente.');
+                        });
                 };
                 
                 const getCandidaturas = (plantaoId) => {
