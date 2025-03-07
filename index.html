@@ -423,9 +423,9 @@
                     </button>
                 </div>
                 <div v-if="plantaoSelecionado && plantaoSelecionado.data" class="mb-4">
-                    <p class="font-medium">Data: {{ formatarData(plantaoSelecionado.data) }}</p>
-                    <p>Turno: {{ plantaoSelecionado.turno }}</p>
-                    <p>Tipo de Vaga: {{ plantaoSelecionado.tipoVaga }}</p>
+                    <p class="font-medium">Data: <span v-text="formatarData(plantaoSelecionado.data)"></span></p>
+                    <p>Turno: <span v-text="plantaoSelecionado.turno"></span></p>
+                    <p>Tipo de Vaga: <span v-text="plantaoSelecionado.tipoVaga"></span></p>
                 </div>
                 <div v-else class="mb-4 text-red-500">
                     Erro ao carregar informações do plantão. Por favor, feche o modal e tente novamente.
@@ -486,66 +486,6 @@
                     mostrarModalCandidatura.value = false;
                 };
 
-                const abrirModalCandidatura = (plantao) => {
-                    console.log("Abrindo modal de candidatura para plantão:", plantao);
-                    
-                    if (!plantao || !plantao.id) {
-                        console.error("Plantão inválido ou sem ID:", plantao);
-                        alert("Erro ao abrir candidatura. Tente atualizar a página.");
-                        return;
-                    }
-                    
-                    // Verifica candidaturas antes de abrir o modal
-                    const candidaturasExistentes = minhasCandidaturas.value.filter(c => c.plantaoId === plantao.id).length;
-                    console.log(`Total de candidaturas existentes para este plantão: ${candidaturasExistentes}`);
-                    
-                    if (candidaturasExistentes >= 3) {
-                        alert('Este plantão já atingiu o limite máximo de 3 candidaturas!');
-                        return;
-                    }
-                    
-                    // Se tudo estiver ok, abre o modal
-                    plantaoSelecionado.value = plantao;
-                    mostrarModalCandidatura.value = true;
-                };
-
-                const candidatar = async (plantaoId) => {
-                    // Esta função não está sendo usada diretamente, e está causando conflito
-                    // com abrirModalCandidatura. Redirecionamos para a nova implementação
-                    try {
-                        const plantao = plantoesDisponiveis.value.find(p => p.id === plantaoId);
-                        if (plantao) {
-                            abrirModalCandidatura(plantao);
-                        } else {
-                            console.error("Plantão não encontrado com ID:", plantaoId);
-                            alert("Erro ao encontrar o plantão. Por favor, atualize a página.");
-                        }
-                    } catch (error) {
-                        console.error("Erro ao processar candidatura:", error);
-                        alert("Ocorreu um erro ao processar sua candidatura. Por favor, tente novamente.");
-                    }
-                };
-
-                const realizarSorteio = async (plantaoId) => {
-                    const candidaturas = await db.collection('candidaturas').where('plantaoId', '==', plantaoId).get();
-                    const candidatos = candidaturas.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-                    if (candidatos.length > 0) {
-                        const indiceAleatorio = Math.floor(Math.random() * candidatos.length);
-                        const candidatoSelecionado = candidatos[indiceAleatorio];
-
-                        for (const candidato of candidatos) {
-                            await db.collection('candidaturas').doc(candidato.id).update({
-                                status: candidato.id === candidatoSelecionado.id ? 'Aprovado' : 'Não selecionado'
-                            });
-                        }
-
-                        console.log(`Candidato selecionado: ${candidatoSelecionado.nome}`);
-                    } else {
-                        console.log('Nenhum candidato encontrado para o sorteio.');
-                    }
-                };
-                
                 const salvarPlantao = () => {
                     const plantao = {
                         tipo: novoPlantao.value.tipo,
@@ -752,29 +692,6 @@
                     }
                 };
 
-                const abrirModalCandidatura = (plantao) => {
-                    console.log("Abrindo modal de candidatura para plantão:", plantao);
-                    
-                    if (!plantao || !plantao.id) {
-                        console.error("Plantão inválido ou sem ID:", plantao);
-                        alert("Erro ao abrir candidatura. Tente atualizar a página.");
-                        return;
-                    }
-                    
-                    // Verifica candidaturas antes de abrir o modal
-                    const candidaturasExistentes = minhasCandidaturas.value.filter(c => c.plantaoId === plantao.id).length;
-                    console.log(`Total de candidaturas existentes para este plantão: ${candidaturasExistentes}`);
-                    
-                    if (candidaturasExistentes >= 3) {
-                        alert('Este plantão já atingiu o limite máximo de 3 candidaturas!');
-                        return;
-                    }
-                    
-                    // Se tudo estiver ok, abre o modal
-                    plantaoSelecionado.value = plantao;
-                    mostrarModalCandidatura.value = true;
-                };
-
                 onMounted(async () => {
                     try {
                         console.log("Inicializando o aplicativo...");
@@ -807,7 +724,6 @@
                 return {
                     plantoesDisponiveis,
                     minhasCandidaturas,
-                    candidatar,
                     mostrarModalCadastro,
                     novoPlantao,
                     fecharModal,
@@ -823,8 +739,7 @@
                     mostrarDashboard,
                     mostrarMeusPlantoes,
                     desistirPlantao,
-                    gerarRelatorio,
-                    abrirModalCandidatura
+                    gerarRelatorio
                 };
             }
         }).mount('#app');
