@@ -7,15 +7,17 @@
     <meta name="description" content="Sistema web responsivo para gestão automatizada de plantões extras em laboratório clínico, com sorteio automático e controle de candidaturas 12x60.">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
+    <!-- Firebase App (the core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
     <script>
       // Configurações do Firebase
       const firebaseConfig = {
         apiKey: "AIzaSyC3ujl2KmFWB8uHX2eVVpz-vK7zjlJegRE",
         authDomain: "gerenciadorplextra.firebaseapp.com",
         projectId: "gerenciadorplextra",
-        storageBucket: "gerenciadorplextra.firebasestorage.app",
+        storageBucket: "gerenciadorplextra.appspot.com",
         messagingSenderId: "163374616495",
         appId: "1:163374616495:web:03530ec7bc80cf266e695a"
       };
@@ -23,14 +25,22 @@
       // Inicializar o Firebase
       const app = firebase.initializeApp(firebaseConfig);
       const db = firebase.firestore();
+      
+      // Configurar as regras de CORS para o Firestore
+      db.settings({
+        ignoreUndefinedProperties: true,
+        merge: true
+      });
 
       // Funções para interagir com o Firestore
       async function salvarPlantao(plantao) {
           try {
-              await db.collection('plantoes').add(plantao);
-              console.log('Plantão salvo com sucesso!');
+              const docRef = await db.collection('plantoes').add(plantao);
+              console.log('Plantão salvo com sucesso! ID:', docRef.id);
+              return { id: docRef.id, ...plantao };
           } catch (error) {
               console.error('Erro ao salvar plantão:', error);
+              throw error;
           }
       }
 
@@ -42,6 +52,7 @@
               return plantoes;
           } catch (error) {
               console.error('Erro ao obter plantões:', error);
+              return [];
           }
       }
 
@@ -345,18 +356,24 @@
 
                 const cadastrarPlantao = async (plantao) => {
                   try {
-          // Chama a função global salvarPlantao definida no cabeçalho
-        await window.salvarPlantao(plantao);
-        console.log('Plantão cadastrado com sucesso!');
-        alert('Plantão cadastrado com sucesso!');
-        
-        // Atualizar a lista de plantões disponíveis
-        plantoesDisponiveis.value = await obterPlantoes();
-    } catch (error) {
-        console.error('Erro ao cadastrar plantão:', error);
-        alert('Erro ao cadastrar plantão. Verifique o console para mais detalhes.');
-    }
-};
+                    // Chama a função global salvarPlantao definida no cabeçalho
+                    const plantaoSalvo = await window.salvarPlantao(plantao);
+                    console.log('Plantão cadastrado com sucesso!', plantaoSalvo);
+                    alert('Plantão cadastrado com sucesso!');
+                    
+                    // Atualizar a lista de plantões disponíveis
+                    const plantoes = await window.obterPlantoes();
+                    if (plantoes && plantoes.length > 0) {
+                        plantoesDisponiveis.value = plantoes;
+                        console.log('Lista de plantões atualizada:', plantoesDisponiveis.value);
+                    } else {
+                        console.warn('Nenhum plantão foi retornado após o cadastro');
+                    }
+                  } catch (error) {
+                    console.error('Erro ao cadastrar plantão:', error);
+                    alert('Erro ao cadastrar plantão. Verifique o console para mais detalhes.');
+                  }
+                };
                 
                 const confirmarCandidatura = () => {
                     if (!nomeCandidato.value || !plantaoSelecionado.value) {
