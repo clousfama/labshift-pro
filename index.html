@@ -121,12 +121,7 @@
                   });
               });
               
-              // Se houver menos de 3 candidaturas, aguardar mais candidaturas
-              if (candidaturas.length < 3) {
-                  console.log(`Sorteio cancelado: apenas ${candidaturas.length} candidaturas (mínimo 3)`);
-                  return 'Aguardando mais candidaturas';
-              }
-              
+              // Realizar o sorteio independentemente do número de candidaturas
               // Sortear um candidato aleatoriamente
               const indiceSorteado = Math.floor(Math.random() * candidaturas.length);
               const candidaturaSorteada = candidaturas[indiceSorteado];
@@ -229,7 +224,7 @@
                              class="border p-4 rounded-lg hover:bg-gray-50">
                             <div class="flex justify-between items-center">
                                 <div class="w-3/4">
-                                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{{ getCandidaturas(plantao.id) }}/3 candidatos</span>
+                                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{{ getCandidaturas(plantao.id) }} candidato(s)</span>
                                     <h3 class="font-medium">{{ formatarData(plantao.data) }}</h3>
                                     <p class="text-gray-600">Turno: {{ plantao.turno }}</p>
                                     <p class="text-gray-600">Tipo de Vaga: {{ plantao.tipoVaga }} <span v-if="plantao.candidatoSelecionado" class="bg-green-100 text-green-800 px-2 py-1 rounded-full font-bold ml-2">Contemplado: {{ plantao.candidatoSelecionado }}</span></p>
@@ -532,16 +527,7 @@
                         return;
                     }
                     
-                    // Verificar candidaturas existentes para este plantão
-                    const candidaturasExistentes = minhasCandidaturas.value.filter(
-                        c => c.plantaoId === plantaoSelecionado.value.id
-                    ).length;
-                    
-                    if (candidaturasExistentes >= 3) {
-                        alert("Este plantão já atingiu o limite máximo de 3 candidaturas!");
-                        fecharModalCandidatura();
-                        return;
-                    }
+                    // Não há mais limite de candidaturas por plantão
                     
                     // Gerar nova candidatura
                     const novaCandidatura = {
@@ -562,15 +548,14 @@
                             novaCandidatura.id = docRef.id;
                             minhasCandidaturas.value.push(novaCandidatura);
                             
-                            // Contar total de candidaturas para este plantão
-                            const totalCandidaturas = minhasCandidaturas.value.filter(
+                            // Verificar se é a primeira candidatura para este plantão
+                            const plantaoCandidaturas = minhasCandidaturas.value.filter(
                                 c => c.plantaoId === plantaoSelecionado.value.id
-                            ).length;
+                            );
                             
-                            console.log(`Total de candidaturas para este plantão: ${totalCandidaturas}`);
-                            
-                            if (totalCandidaturas >= 3) {
-                                console.log("Atingiu 3 candidaturas. Iniciando sorteio.");
+                            if (plantaoCandidaturas.length === 1) {
+                                // Se for a primeira candidatura, programar o sorteio para acontecer após 1 hora
+                                console.log("Primeira candidatura. Agendando sorteio para daqui a 1 hora");
                                 
                                 // Importante: Salvar o ID do plantão antes de fechar o modal
                                 const plantaoId = plantaoSelecionado.value.id;
@@ -579,13 +564,13 @@
                                 nomeCandidato.value = '';
                                 fecharModalCandidatura();
                                 
-                                // Agora realizar o sorteio com o ID salvo
+                                // Agendar o sorteio para acontecer após 1 hora (3600000 ms)
                                 setTimeout(() => {
-                                    console.log("Realizando sorteio para plantão ID:", plantaoId);
+                                    console.log("Realizando sorteio automático após 1 hora para plantão ID:", plantaoId);
                                     window.realizarSorteio(plantaoId);
-                                }, 1000);
+                                }, 3600000); // 1 hora em milissegundos
                             } else {
-                                // Se não atingiu 3 candidaturas, apenas fechar o modal
+                                // Se não for a primeira candidatura, apenas fechar o modal
                                 nomeCandidato.value = '';
                                 fecharModalCandidatura();
                             }
